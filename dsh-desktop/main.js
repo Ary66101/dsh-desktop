@@ -41,8 +41,9 @@ function serverUp() {
 }
 
 function resolveDsh() {
-  const fixed = 'D:\\node.js\\node_global\\dsh.cmd';
-  if (fs.existsSync(fixed)) return fixed;
+  // 优先用环境变量 DSH_CMD 显式指定 dsh.cmd 位置,不再硬编码本机路径
+  const override = process.env.DSH_CMD;
+  if (override && fs.existsSync(override)) return override;
   return 'dsh.cmd'; // 退回 PATH 解析
 }
 

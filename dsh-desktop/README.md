@@ -38,6 +38,9 @@
 
 - 服务地址默认 `http://127.0.0.1:3080`;想改地址,设置环境变量 `DSH_URL` 再启动,
   例如 `set DSH_URL=http://localhost:3080 && npm start`。
+- 指定 `dsh` 命令的位置:默认按 PATH 查找 `dsh.cmd`;若不在 PATH 里,
+  可设置环境变量 `DSH_CMD` 指向完整路径,例如
+  `set DSH_CMD=D:\tools\dsh.cmd && npm start`(不用再改代码)。
 - 想看真正的浏览器调试面板:菜单 → 视图 → 开发者工具 (F12)。
 
 ## 目录结构

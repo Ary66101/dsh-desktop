@@ -5,3 +5,15 @@ userdata/
 dist/
 out/
 *.log
+
+# 环境变量与密钥(绝不要提交)
+.env
+.env.local
+.env.production
+.env.*.local
+*.pem
+*.key
+*.crt
+
+# 运行期临时产物
+smoke-result.txt
