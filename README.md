@@ -81,6 +81,27 @@ DSH 是桌面端背后的服务本体,通过 npm 安装,整个过程不需要会
 **Q:怎么卸载?**
 退出后删除 exe 和旁边的 `userdata/` 文件夹即可(免安装绿色软件)。
 
+**Q:我已经装了 DSH,为什么还提示"需要先安装"?cmd 里 `dsh` 也用不了?**
+这通常是 **dsh 装了,但它所在的目录不在系统 PATH 里**。判断方法:
+在 PowerShell 里运行 `npx @deepseek-ai/dsh web` 能正常打开网页端 → 说明**确实装好了**,
+只是 `dsh` 命令没进 PATH。所以 cmd 里 `dsh web`、`dsh -V` 会报"不是内部或外部命令",
+这**不是没装**,而是 PATH 的问题。
+
+**Q:为什么我每次用都要重新跑一遍安装命令?**
+其实**不用每次重装**。如果每次是用 `npx @deepseek-ai/dsh web` 来启动,npx 每次都会重新解析包,
+所以感觉像"又来一遍"。`npm install -g @deepseek-ai/dsh` 装一次就够了。
+
+**Q:那怎么一次性修好,以后双击就能用?**
+把 npm 全局目录加进系统 PATH(只需一次):
+1. 运行 `npm config get prefix`,记下打印的目录(如 `C:\Users\你\AppData\Roaming\npm`);
+2. `Win+R` → 输入 `sysdm.cpl` → 回车 → **高级** → **环境变量** → 在"你的用户变量"的
+   `Path` 里**新建**一项,填入上面那个目录 → 确定;
+3. **重启电脑**。
+之后 `dsh -V`、`dsh web` 都能用,**双击桌面 exe 直接进界面**,不用再手动敲任何命令。
+> 只想让桌面端能用、不想改系统设置?在 cmd 里运行 `setx DSH_CMD "…\dsh.cmd"`
+> (路径 = `npm config get prefix` 的输出 + `\dsh.cmd`),然后重启——但那样 cmd 里敲
+> `dsh` 依然不行。
+
 ---
 
 ## 🤝 反馈
