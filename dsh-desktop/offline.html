@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>DeepSeek Harness 桌面端</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(1200px 720px at 50% 42%, #e8f1ff 0%, #f5faff 48%, #ffffff 100%);
+    color: #16315e;
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* 中央柔光晕(参考图的辉光,换成蓝色) */
+  .halo {
+    position: absolute;
+    left: 50%; top: 42%;
+    width: 560px; height: 560px;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(59,130,246,.30) 0%, rgba(59,130,246,.12) 38%, rgba(59,130,246,0) 70%);
+    filter: blur(10px);
+    animation: breathe 3.6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes breathe {
+    0%, 100% { opacity: .75; transform: translate(-50%,-50%) scale(1); }
+    50% { opacity: 1; transform: translate(-50%,-50%) scale(1.06); }
+  }
+
+  .card { position: relative; text-align: center; z-index: 1; }
+
+  .brand { display: inline-flex; align-items: center; gap: 18px; }
+  .logo {
+    width: 78px; height: 78px; border-radius: 22px;
+    background: linear-gradient(135deg, #2563eb, #38bdf8);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 36px; font-weight: 700; color: #fff;
+    box-shadow: 0 10px 34px rgba(37, 99, 235, .35);
+  }
+  .wordmark { display: flex; align-items: baseline; gap: 10px; font-weight: 700; }
+  .wordmark .name { font-size: 34px; letter-spacing: .5px; color: #16315e; }
+  .wordmark .tag {
+    font-size: 15px; letter-spacing: 2px; color: #fff;
+    background: #16315e; padding: 5px 12px; border-radius: 999px;
+    transform: translateY(-4px);
+  }
+
+  h1 { margin-top: 34px; font-size: 19px; font-weight: 600; color: #16315e; }
+  .sub { margin-top: 10px; font-size: 13px; color: #5b6b8c; line-height: 1.9; }
+  code { background: #e8f1ff; padding: 2px 8px; border-radius: 6px; color: #2563eb; font-size: 12px; }
+
+  /* 细进度线 + 呼吸高光(参考图的进度线) */
+  .line {
+    margin: 34px auto 0;
+    width: 240px; height: 3px; border-radius: 3px;
+    background: #dbe7fb;
+    box-shadow: 0 0 14px rgba(37,99,235,.35);
+    position: relative; overflow: hidden;
+  }
+  .line::after {
+    content: ""; position: absolute; top: 0; left: 0;
+    width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, #2563eb, transparent);
+    animation: sweep 1.6s ease-in-out infinite;
+    box-shadow: 0 0 12px rgba(37,99,235,.65);
+  }
+  @keyframes sweep {
+    0% { left: -60%; } 100% { left: 100%; }
+  }
+
+  .status { margin-top: 18px; font-size: 12.5px; color: #7c8cad; }
+  .status.ok { color: #0e9f6e; }
+  .dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: #2563eb; margin-right: 7px;
+    box-shadow: 0 0 8px rgba(37,99,235,.5);
+    animation: pulse 1.2s infinite;
+    transform: translateY(-1px);
+  }
+  @keyframes pulse { 0%, 100% { opacity: .3 } 50% { opacity: 1 } }
+
+  button {
+    margin-top: 20px; padding: 9px 30px; font-size: 13px;
+    border: none; border-radius: 999px;
+    background: linear-gradient(135deg, #2563eb, #38bdf8);
+    color: #fff; cursor: pointer;
+    box-shadow: 0 6px 18px rgba(37,99,235,.3);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  button:hover { transform: translateY(-1px); box-shadow: 0 9px 24px rgba(37,99,235,.4); }
+  button:active { transform: translateY(0); }
+
+  .foot {
+    position: absolute; bottom: 34px; left: 0; right: 0;
+    text-align: center;
+    font-size: 10.5px; letter-spacing: 4px; color: #9db2d8;
+  }
+</style>
+</head>
+<body>
+<div class="halo"></div>
+
+<div class="card">
+  <div class="brand">
+    <div class="logo">DS</div>
+    <div class="wordmark"><span class="name">DeepSeek</span><span class="tag">HARNESS</span></div>
+  </div>
+
+  <h1>正在启动本地服务</h1>
+  <p class="sub">桌面端正在自动拉起 <code>dsh web</code> 服务,就绪后会自动进入界面。<br>长时间无响应请查看同目录 <code>launch.log</code>。</p>
+
+  <div class="line"></div>
+  <div class="status"><span class="dot"></span><span id="msg">正在连接 http://127.0.0.1:3080 ...</span></div>
+
+  <button id="retry">立即重试</button>
+</div>
+
+<div class="foot">DEEPSEEK HARNESS · DESKTOP</div>
+
+<script>
+  const SERVER_URL = 'http://127.0.0.1:3080';
+  const msgEl = document.getElementById('msg');
+  const statusEl = document.querySelector('.status');
+  let timer = null;
+
+  async function check() {
+    try {
+      const r = await fetch(SERVER_URL, { method: 'GET', cache: 'no-store', mode: 'cors' });
+      if (r.ok || r.status < 500) {
+        statusEl.classList.add('ok');
+        location.href = SERVER_URL;
+        return true;
+      }
+      throw new Error('status ' + r.status);
+    } catch (e) {
+      statusEl.classList.remove('ok');
+      msgEl.textContent = '未检测到服务 ' + SERVER_URL + ' · ' + new Date().toLocaleTimeString();
+      return false;
+    }
+  }
+
+  document.getElementById('retry').onclick = () => { check(); };
+
+  (function loop() {
+    check().then(ok => { if (!ok) timer = setTimeout(loop, 3000); });
+  })();
+</script>
+</body>
+</html>

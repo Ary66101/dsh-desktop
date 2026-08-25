@@ -1,0 +1,306 @@
+'use strict';
+
+const { app, BrowserWindow, Menu, shell, dialog, net } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const { spawn, execFileSync, execFile } = require('child_process');
+const { promisify } = require('util');
+const execFileP = promisify(execFile);
+
+// 错误日志写文件,便于在桌面环境外排查启动问题
+const errlog = (tag, err) => {
+  try {
+    fs.appendFileSync(
+      path.join(__dirname, 'main-error.log'),
+      `[${tag}] ${new Date().toISOString()}\n${(err && (err.stack || err)) || err}\n\n`
+    );
+  } catch (_) {}
+};
+process.on('uncaughtException', (e) => errlog('uncaughtException', e));
+process.on('unhandledRejection', (e) => errlog('unhandledRejection', e));
+
+// 目标服务地址:默认 DSH Web 界面,可用环境变量 DSH_URL 覆盖
+const SERVER_URL = process.env.DSH_URL || 'http://127.0.0.1:3080';
+const SMOKE = process.argv.includes('--smoke');
+
+// ---- dsh web 服务生命周期:缺失时静默拉起,退出时只杀自己启动的 ----
+const SERVER_PORT = (() => {
+  try { return new URL(SERVER_URL).port; } catch (_) { return ''; }
+})();
+
+function serverUp() {
+  return new Promise((resolve) => {
+    try {
+      const req = net.request({ method: 'GET', url: SERVER_URL });
+      req.on('response', (res) => { res.resume(); resolve(res.statusCode < 500); });
+      req.on('error', () => resolve(false));
+      req.setTimeout(2000, () => { try { req.abort(); } catch (_) {} resolve(false); });
+      req.end();
+    } catch (_) { resolve(false); }
+  });
+}
+
+function resolveDsh() {
+  const fixed = 'D:\\node.js\\node_global\\dsh.cmd';
+  if (fs.existsSync(fixed)) return fixed;
+  return 'dsh.cmd'; // 退回 PATH 解析
+}
+
+let serverChild = null;
+async function ensureServer() {
+  if (await serverUp()) {
+    errlog('server', 'already running, no spawn needed');
+    return;
+  }
+  const spawnCmd = process.env.DSH_SPAWN ||
+    (resolveDsh() + ' web --no-open' + (SERVER_PORT ? ' --port ' + SERVER_PORT : ''));
+  errlog('server', 'spawning hidden: ' + spawnCmd);
+  try {
+    // windowsHide + stdio ignore => 完全不出现控制台窗口
+    serverChild = spawn(spawnCmd, { shell: true, windowsHide: true, stdio: 'ignore' });
+    serverChild.on('exit', (code) => {
+      errlog('server', 'child exited code=' + code);
+      serverChild = null;
+    });
+  } catch (e) {
+    errlog('server', 'spawn failed: ' + e.message);
+  }
+}
+
+function stopServerIfOwned() {
+  if (serverChild && serverChild.pid) {
+    try {
+      errlog('server', 'stopping owned server pid=' + serverChild.pid);
+      execFileSync('taskkill', ['/F', '/T', '/PID', String(serverChild.pid)], { stdio: 'ignore' });
+    } catch (e) {
+      errlog('server', 'taskkill failed: ' + e.message);
+    }
+    serverChild = null;
+  }
+}
+
+// 本应用的 Electron 二进制路径:判断连接者是否"自己人"的唯一依据
+// (其它应用即使是 electron 外壳,路径也不同,会被当作网页端/外来者)
+const OUR_ELECTRON = path.join(__dirname, 'node_modules', 'electron', 'dist', 'electron.exe');
+
+/**
+ * 网页端是否也在用服务:列出所有 ESTABLISHED 到 SERVER_PORT 的连接及其进程路径,
+ * 只要存在一个非本应用的进程(浏览器、其它工具等)就认为"网页端在用"。
+ * 探测失败时保守返回 true(保留服务,不误杀网页端)。
+ */
+async function hasForeignWebClients() {
+  try {
+    const ps =
+      'Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue | ' +
+      `Where-Object { $_.RemotePort -eq ${SERVER_PORT} } | ` +
+      'ForEach-Object { $p = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue; ' +
+      'if ($p -and $p.Path) { $p.Id.ToString() + "|" + $p.Path } } | Sort-Object -Unique';
+    const { stdout } = await execFileP('powershell', ['-NoProfile', '-Command', ps], {
+      timeout: 10000,
+      windowsHide: true
+    });
+    const lines = stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    for (const line of lines) {
+      const [, p] = line.split('|');
+      if (p && p.toLowerCase() !== OUR_ELECTRON.toLowerCase()) {
+        errlog('server', 'foreign client on ' + SERVER_URL + ': ' + line);
+        return true;
+      }
+    }
+    return false;
+  } catch (e) {
+    errlog('server', 'client probe failed, keeping server: ' + e.message);
+    return true; // 无法确认"仅桌面端" → 保守保留服务
+  }
+}
+
+// 让 Chromium 的用户数据(缓存、Cookie、LocalStorage)全部留在应用文件夹内,
+// 应用自包含、可整体拷贝,不污染系统 AppData
+app.setPath('userData', path.join(__dirname, 'userdata'));
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const [win] = BrowserWindow.getAllWindows();
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
+  });
+
+  let win = null;
+
+  function createWindow() {
+    win = new BrowserWindow({
+      width: 1280,
+      height: 820,
+      minWidth: 860,
+      minHeight: 560,
+      title: 'DeepSeek Harness 桌面端',
+      icon: path.join(__dirname, 'logo-black.png'),
+      backgroundColor: '#f5faff',
+      autoHideMenuBar: false,
+      webPreferences: {
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    });
+
+    const loadHome = () => win.loadURL(SERVER_URL);
+
+    // 调试:渲染进程异常时记下原因
+    win.webContents.on('render-process-gone', (_e, details) => {
+      errlog('render-process-gone', JSON.stringify(details));
+    });
+    win.webContents.on('did-start-loading', () => {
+      try { fs.appendFileSync(path.join(__dirname, 'main-error.log'), '[did-start-loading] ' + new Date().toISOString() + '\n'); } catch (_) {}
+    });
+
+    // 新窗口一律交给系统浏览器
+    win.webContents.setWindowOpenHandler(({ url }) => {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    });
+
+    // 只允许停留在 DSH 服务域内,外部跳转交给系统浏览器
+    win.webContents.on('will-navigate', (e, url) => {
+      try {
+        const u = new URL(url);
+        const allowed = new URL(SERVER_URL);
+        if (u.origin !== allowed.origin) {
+          e.preventDefault();
+          shell.openExternal(url);
+        }
+      } catch (_) {}
+    });
+
+    // 服务器没起来(连接被拒)→ 显示离线引导页,页面会自动轮询重连
+    win.webContents.on('did-fail-load', (_e, code, _desc, _url, isMainFrame) => {
+      if (!isMainFrame) return;
+      if (code === -3) return; // ERR_ABORTED:自身跳转导致的取消,忽略
+      win.loadFile(path.join(__dirname, 'offline.html')).catch(() => {});
+    });
+
+    loadHome();
+
+    if (SMOKE) {
+      const fs = require('fs');
+      const writeSmoke = (text) => {
+        try { fs.writeFileSync(path.join(__dirname, 'smoke-result.txt'), text); } catch (_) {}
+      };
+      // 只要窗口成功加载了任一页面(DSH 界面或离线页)即视为启动正常
+      win.webContents.on('did-finish-load', () => {
+        console.log('SMOKE_OK ' + win.webContents.getURL());
+        writeSmoke('SMOKE_OK ' + win.webContents.getURL());
+        setTimeout(() => app.exit(0), 600);
+      });
+      // 兜底:15 秒内完全没有页面加载成功则判定失败
+      setTimeout(() => {
+        const url = win && win.webContents.getURL();
+        if (!win || !url) {
+          console.log('SMOKE_FAIL no page loaded');
+          writeSmoke('SMOKE_FAIL no page loaded');
+          app.exit(1);
+        } else {
+          console.log('SMOKE_OK(FALLBACK) ' + url);
+          writeSmoke('SMOKE_OK(FALLBACK) ' + url);
+          app.exit(0);
+        }
+      }, 15000);
+    }
+  }
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: '文件',
+      submenu: [
+        { label: '重新加载', accelerator: 'CmdOrCtrl+R', role: 'reload' },
+        { label: '强制重新加载', accelerator: 'CmdOrCtrl+Shift+R', role: 'forceReload' },
+        { type: 'separator' },
+        { label: '退出', role: 'quit' }
+      ]
+    },
+    {
+      label: '视图',
+      submenu: [
+        {
+          label: '后退',
+          accelerator: 'Alt+Left',
+          click: () => win && win.webContents.navigationHistory.canGoBack() && win.webContents.navigationHistory.goBack()
+        },
+        {
+          label: '前进',
+          accelerator: 'Alt+Right',
+          click: () => win && win.webContents.navigationHistory.canGoForward() && win.webContents.navigationHistory.goForward()
+        },
+        { label: '回到首页', click: () => win && win.loadURL(SERVER_URL) },
+        { type: 'separator' },
+        { label: '开发者工具', accelerator: 'F12', click: () => win && win.webContents.toggleDevTools() },
+        { label: '实际大小', role: 'resetZoom' },
+        { label: '放大', role: 'zoomIn' },
+        { label: '缩小', role: 'zoomOut' }
+      ]
+    },
+    {
+      label: '帮助',
+      submenu: [
+        { label: '服务地址: ' + SERVER_URL, enabled: false },
+        { label: '在系统浏览器中打开', click: () => shell.openExternal(SERVER_URL) },
+        { type: 'separator' },
+        {
+          label: '关于',
+          click: () =>
+            dialog.showMessageBox(win, {
+              type: 'info',
+              title: '关于',
+              message: 'DeepSeek Harness 桌面端',
+              detail:
+                '版本 1.0.0\n' +
+                '服务地址: ' + SERVER_URL + '\n' +
+                '数据目录: ' + app.getPath('userData') + '\n' +
+                'Electron: ' + process.versions.electron
+            })
+        }
+      ]
+    }
+  ]);
+  Menu.setApplicationMenu(menu);
+
+  app.whenReady().then(() => {
+    createWindow();
+    ensureServer(); // 服务没起就静默拉起,离线页会自动重连
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+  });
+
+  let quitChecked = false;
+  app.on('before-quit', (e) => {
+    if (quitChecked) return;
+    // 服务不是本应用启动的 → 一律不动,直接退出
+    if (!serverChild) return;
+    e.preventDefault();
+    quitChecked = true;
+    (async () => {
+      try {
+        const foreign = await hasForeignWebClients();
+        errlog('server', 'quit check: foreignWebClients=' + foreign);
+        if (!foreign) {
+          stopServerIfOwned(); // 只有桌面端在用 → 关闭 3080
+        } else {
+          errlog('server', 'web gui still in use, leaving server running');
+        }
+      } finally {
+        app.exit(0);
+      }
+    })();
+  });
+}
