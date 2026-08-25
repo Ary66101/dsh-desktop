@@ -17,3 +17,6 @@ out/
 
 # 运行期临时产物
 smoke-result.txt
+
+# 打包缓存(electron-builder 下载目录)
+.builder-cache/

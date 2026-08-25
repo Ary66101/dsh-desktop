@@ -7,9 +7,36 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "smoke": "electron . --smoke"
+    "smoke": "electron . --smoke",
+    "dist": "electron-builder --win portable --publish never"
   },
   "devDependencies": {
-    "electron": "^44.0.0"
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.ary.dshdesktop",
+    "productName": "DeepSeek Harness 桌面端",
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "offline.html",
+      "setup-guide.html",
+      "package.json",
+      "README.md",
+      "logo-black.ico",
+      "logo-black.png",
+      "start-desktop.bat",
+      "launch.vbs"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "logo-black.ico"
+    }
   }
 }

@@ -41,10 +41,20 @@ function serverUp() {
 }
 
 function resolveDsh() {
-  // 优先用环境变量 DSH_CMD 显式指定 dsh.cmd 位置,不再硬编码本机路径
+  // 优先用环境变量 DSH_CMD 显式指定 dsh.cmd 位置
   const override = process.env.DSH_CMD;
   if (override && fs.existsSync(override)) return override;
-  return 'dsh.cmd'; // 退回 PATH 解析
+  // 按 PATH 查找 dsh.cmd / dsh.bat / dsh.exe / dsh
+  const candidates = ['dsh.cmd', 'dsh.bat', 'dsh.exe', 'dsh'];
+  const dirs = (process.env.PATH || '').split(path.delimiter);
+  for (const dir of dirs) {
+    if (!dir) continue;
+    for (const name of candidates) {
+      const p = path.join(dir, name);
+      try { if (fs.existsSync(p)) return p; } catch (_) {}
+    }
+  }
+  return null; // 找不到 → 交给安装引导页
 }
 
 let serverChild = null;
@@ -53,8 +63,14 @@ async function ensureServer() {
     errlog('server', 'already running, no spawn needed');
     return;
   }
+  if (serverChild) return; // 已有启动中的子进程,避免重复拉起
+  const dsh = resolveDsh();
+  if (!dsh) {
+    errlog('server', 'dsh not found on PATH / DSH_CMD, showing setup guide');
+    return; // 找不到 dsh → 由 setup-guide.html 引导安装
+  }
   const spawnCmd = process.env.DSH_SPAWN ||
-    (resolveDsh() + ' web --no-open' + (SERVER_PORT ? ' --port ' + SERVER_PORT : ''));
+    (dsh + ' web --no-open' + (SERVER_PORT ? ' --port ' + SERVER_PORT : ''));
   errlog('server', 'spawning hidden: ' + spawnCmd);
   try {
     // windowsHide + stdio ignore => 完全不出现控制台窗口
@@ -167,7 +183,7 @@ if (!gotLock) {
       return { action: 'deny' };
     });
 
-    // 只允许停留在 DSH 服务域内,外部跳转交给系统浏览器
+    // 只允许停留在 DSH 服务域内(含引导页 file: 跳回服务地址),外部跳转交给系统浏览器
     win.webContents.on('will-navigate', (e, url) => {
       try {
         const u = new URL(url);
@@ -179,11 +195,25 @@ if (!gotLock) {
       } catch (_) {}
     });
 
-    // 服务器没起来(连接被拒)→ 显示离线引导页,页面会自动轮询重连
+    // 服务器没起来(连接被拒)→ 按原因显示对应引导页,页面会自动轮询重连
     win.webContents.on('did-fail-load', (_e, code, _desc, _url, isMainFrame) => {
       if (!isMainFrame) return;
       if (code === -3) return; // ERR_ABORTED:自身跳转导致的取消,忽略
-      win.loadFile(path.join(__dirname, 'offline.html')).catch(() => {});
+      ensureServer(); // 每次断连都再尝试拉起(内部会去重)
+      const page = resolveDsh() ? 'offline.html' : 'setup-guide.html';
+      win.loadFile(path.join(__dirname, page)).catch(() => {});
+    });
+
+    // 引导页/离线页每次加载完都复查一次:服务可用就立即切回 DSH 界面
+    win.webContents.on('did-finish-load', () => {
+      const url = win.webContents.getURL();
+      if (!url.startsWith('file:')) return;
+      (async () => {
+        try {
+          if (await serverUp()) { win.loadURL(SERVER_URL); return; }
+          await ensureServer();
+        } catch (_) {}
+      })();
     });
 
     loadHome();

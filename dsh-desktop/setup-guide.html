@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>DeepSeek Harness 桌面端</title>
+<title>DeepSeek Harness 桌面端 - 安装引导</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; }
@@ -14,7 +14,6 @@
     display: flex; align-items: center; justify-content: center;
   }
 
-  /* 中央柔光晕(参考图的辉光,换成蓝色) */
   .halo {
     position: absolute;
     left: 50%; top: 42%;
@@ -30,7 +29,7 @@
     50% { opacity: 1; transform: translate(-50%,-50%) scale(1.06); }
   }
 
-  .card { position: relative; text-align: center; z-index: 1; }
+  .card { position: relative; text-align: center; z-index: 1; max-width: 560px; }
 
   .brand { display: inline-flex; align-items: center; gap: 18px; }
   .logo {
@@ -48,30 +47,21 @@
     transform: translateY(-4px);
   }
 
-  h1 { margin-top: 34px; font-size: 19px; font-weight: 600; color: #16315e; }
+  h1 { margin-top: 32px; font-size: 19px; font-weight: 600; color: #16315e; }
   .sub { margin-top: 10px; font-size: 13px; color: #5b6b8c; line-height: 1.9; }
   code { background: #e8f1ff; padding: 2px 8px; border-radius: 6px; color: #2563eb; font-size: 12px; }
 
-  /* 细进度线 + 呼吸高光(参考图的进度线) */
-  .line {
-    margin: 34px auto 0;
-    width: 240px; height: 3px; border-radius: 3px;
-    background: #dbe7fb;
-    box-shadow: 0 0 14px rgba(37,99,235,.35);
-    position: relative; overflow: hidden;
+  ol.steps {
+    margin: 24px auto 0;
+    text-align: left;
+    display: inline-block;
+    font-size: 13px;
+    color: #33486e;
+    line-height: 2.1;
   }
-  .line::after {
-    content: ""; position: absolute; top: 0; left: 0;
-    width: 60%; height: 100%;
-    background: linear-gradient(90deg, transparent, #2563eb, transparent);
-    animation: sweep 1.6s ease-in-out infinite;
-    box-shadow: 0 0 12px rgba(37,99,235,.65);
-  }
-  @keyframes sweep {
-    0% { left: -60%; } 100% { left: 100%; }
-  }
+  ol.steps li::marker { color: #2563eb; font-weight: 700; }
 
-  .status { margin-top: 18px; font-size: 12.5px; color: #7c8cad; }
+  .status { margin-top: 20px; font-size: 12.5px; color: #7c8cad; }
   .status.ok { color: #0e9f6e; }
   .dot {
     display: inline-block; width: 7px; height: 7px; border-radius: 50%;
@@ -83,7 +73,7 @@
   @keyframes pulse { 0%, 100% { opacity: .3 } 50% { opacity: 1 } }
 
   button {
-    margin-top: 20px; padding: 9px 30px; font-size: 13px;
+    margin-top: 22px; padding: 9px 30px; font-size: 13px;
     border: none; border-radius: 999px;
     background: linear-gradient(135deg, #2563eb, #38bdf8);
     color: #fff; cursor: pointer;
@@ -109,13 +99,18 @@
     <div class="wordmark"><span class="name">DeepSeek</span><span class="tag">HARNESS</span></div>
   </div>
 
-  <h1>正在启动本地服务</h1>
-  <p class="sub">桌面端正在自动拉起 <code>dsh web</code> 服务,就绪后会自动进入界面。<br>长时间无响应请查看同目录 <code>launch.log</code>。</p>
+  <h1>需要先安装 DeepSeek Harness</h1>
+  <p class="sub">桌面端只是 DSH 的界面外壳,本机还没有找到 <code>dsh</code> 命令,<br>因此无法自动启动本地服务。按下面 3 步操作:</p>
 
-  <div class="line"></div>
-  <div class="status"><span class="dot"></span><span id="msg">正在连接 http://127.0.0.1:3080 ...</span></div>
+  <ol class="steps">
+    <li>安装 DeepSeek Harness,或把 <code>dsh</code> 所在目录加入系统 PATH</li>
+    <li>也可以设置环境变量 <code>DSH_CMD</code> 指向 <code>dsh.cmd</code> 的完整路径</li>
+    <li>设置环境变量 / PATH 后请<strong>完全退出并重新打开本应用</strong></li>
+  </ol>
 
-  <button id="retry">立即重试</button>
+  <div class="status"><span class="dot"></span><span id="msg">正在检测本地服务 ...</span></div>
+
+  <button id="retry">重新检测</button>
 </div>
 
 <div class="foot">DEEPSEEK HARNESS · DESKTOP</div>
@@ -124,7 +119,6 @@
   const SERVER_URL = 'http://127.0.0.1:3080';
   const msgEl = document.getElementById('msg');
   const statusEl = document.querySelector('.status');
-  let timer = null;
 
   async function check() {
     try {
@@ -138,15 +132,16 @@
       throw new Error('status ' + r.status);
     } catch (e) {
       statusEl.classList.remove('ok');
-      msgEl.textContent = '未检测到服务 ' + SERVER_URL + ' · ' + new Date().toLocaleTimeString();
+      msgEl.textContent = '服务未启动 · ' + new Date().toLocaleTimeString();
       return false;
     }
   }
 
-  document.getElementById('retry').onclick = () => { check(); };
+  // 重新检测:若你已经手动启动了 dsh web,这里会直接进入界面
+  document.getElementById('retry').onclick = () => { location.reload(); };
 
   (function loop() {
-    check().then(ok => { if (!ok) timer = setTimeout(loop, 3000); });
+    check().then(ok => { if (!ok) setTimeout(loop, 5000); });
   })();
 </script>
 </body>
