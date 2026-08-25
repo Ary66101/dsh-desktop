@@ -8,10 +8,12 @@ const { promisify } = require('util');
 const execFileP = promisify(execFile);
 
 // 错误日志写文件,便于在桌面环境外排查启动问题
+// 日志放在 userData 目录(setPath 之后才确定可写位置);打包后 __dirname 在只读 asar 里,不能写
+const logFile = () => path.join(app.getPath('userData'), 'main-error.log');
 const errlog = (tag, err) => {
   try {
     fs.appendFileSync(
-      path.join(__dirname, 'main-error.log'),
+      logFile(),
       `[${tag}] ${new Date().toISOString()}\n${(err && (err.stack || err)) || err}\n\n`
     );
   } catch (_) {}
@@ -98,7 +100,9 @@ function stopServerIfOwned() {
 
 // 本应用的 Electron 二进制路径:判断连接者是否"自己人"的唯一依据
 // (其它应用即使是 electron 外壳,路径也不同,会被当作网页端/外来者)
-const OUR_ELECTRON = path.join(__dirname, 'node_modules', 'electron', 'dist', 'electron.exe');
+const OUR_ELECTRON = app.isPackaged
+  ? process.execPath
+  : path.join(__dirname, 'node_modules', 'electron', 'dist', 'electron.exe');
 
 /**
  * 网页端是否也在用服务:列出所有 ESTABLISHED 到 SERVER_PORT 的连接及其进程路径,
@@ -131,9 +135,20 @@ async function hasForeignWebClients() {
   }
 }
 
-// 让 Chromium 的用户数据(缓存、Cookie、LocalStorage)全部留在应用文件夹内,
-// 应用自包含、可整体拷贝,不污染系统 AppData
-app.setPath('userData', path.join(__dirname, 'userdata'));
+// Chromium 的用户数据(缓存、Cookie、LocalStorage)目录:
+// - 源码运行:放应用目录内,自包含、可整体拷贝
+// - 打包后:__dirname 是只读的 app.asar,写不进去会导致启动即无声退出,
+//   必须换成可写位置:portable 版放 exe 旁边,解压/安装版放系统 AppData
+app.setPath('userData', (() => {
+  if (app.isPackaged) {
+    const portableDir = process.env.PORTABLE_EXECUTABLE_DIR; // NSIS portable 会设置
+    if (portableDir) return path.join(portableDir, 'userdata');
+    let base;
+    try { base = app.getPath('appData'); } catch (_) { base = process.env.APPDATA || require('os').tmpdir(); }
+    return path.join(base, 'dsh-desktop');
+  }
+  return path.join(__dirname, 'userdata');
+})());
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -174,7 +189,7 @@ if (!gotLock) {
       errlog('render-process-gone', JSON.stringify(details));
     });
     win.webContents.on('did-start-loading', () => {
-      try { fs.appendFileSync(path.join(__dirname, 'main-error.log'), '[did-start-loading] ' + new Date().toISOString() + '\n'); } catch (_) {}
+      try { fs.appendFileSync(logFile(), '[did-start-loading] ' + new Date().toISOString() + '\n'); } catch (_) {}
     });
 
     // 新窗口一律交给系统浏览器
