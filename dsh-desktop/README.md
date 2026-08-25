@@ -147,3 +147,15 @@ npm run dist     # electron-builder --win portable --publish never
 命令行自检(不开窗口,自动退出):`npm run smoke`,结果写 `smoke-result.txt`。
 
 源码版数据目录用的是项目内 `userdata/`;打包版规则见上文"你的数据在哪里"。
+
+---
+
+## 📜 免责声明
+
+本应用(桌面客户端)由 **DeepSeek Harness** **全程自动制作**:代码编写、界面设计、
+文档撰写与打包发布均由 DeepSeek Harness 完成,不涉及人工编程。
+
+- 本应用是个人实验项目,**与 DeepSeek 官方无任何关联**,亦非官方产品;
+- 仅供学习交流使用,使用者自行承担使用风险;
+- 应用不含任何用户数据,不会上传你的会话记录或密钥(详见上文 FAQ);
+- 本仓库代码以 MIT 协议开源。
