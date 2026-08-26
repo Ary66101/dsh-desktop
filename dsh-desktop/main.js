@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Menu, shell, dialog, net } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog, net, Tray, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn, execFileSync, execFile } = require('child_process');
@@ -150,6 +150,29 @@ app.setPath('userData', (() => {
   return path.join(__dirname, 'userdata');
 })());
 
+// ---- 设置:关闭窗口时的行为 ----
+// 'exit' = 彻底关闭(保持原行为);'tray' = 最小化到托盘,不退出、不动服务
+const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
+let closeBehavior = 'exit';
+let quitting = false; // 真正退出中(托盘里点"退出"/菜单退出),close 不再拦截
+let tray = null;
+
+function loadSettings() {
+  try {
+    const raw = fs.readFileSync(settingsFile(), 'utf8');
+    const s = JSON.parse(raw);
+    if (s.closeBehavior === 'exit' || s.closeBehavior === 'tray') closeBehavior = s.closeBehavior;
+  } catch (_) {}
+}
+function saveCloseBehavior(v) {
+  closeBehavior = v;
+  try {
+    fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });
+    fs.writeFileSync(settingsFile(), JSON.stringify({ closeBehavior: v }, null, 2));
+  } catch (e) { errlog('settings', e); }
+}
+function isTrayClose() { return closeBehavior === 'tray'; }
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -183,6 +206,14 @@ if (!gotLock) {
     });
 
     const loadHome = () => win.loadURL(SERVER_URL);
+
+    // 设置:最小化到托盘时,点 X 只隐藏窗口 —— 不退出、不触发服务清理
+    win.on('close', (e) => {
+      if (!quitting && isTrayClose()) {
+        e.preventDefault();
+        win.hide();
+      }
+    });
 
     // 调试:渲染进程异常时记下原因
     win.webContents.on('render-process-gone', (_e, details) => {
@@ -260,6 +291,35 @@ if (!gotLock) {
     }
   }
 
+  // 托盘:显示/隐藏主窗口,托盘菜单含"退出"
+  function showMainWindow() {
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  }
+
+  function createTray() {
+    try {
+      const icon = nativeImage.createFromPath(path.join(__dirname, 'logo-v3.png'));
+      if (icon.isEmpty()) { errlog('tray', 'tray icon empty'); return; }
+      tray = new Tray(icon.resize({ width: 16, height: 16 }));
+      tray.setToolTip('DeepSeek Harness 桌面端');
+      tray.setContextMenu(Menu.buildFromTemplate([
+        { label: '显示主窗口', click: () => showMainWindow() },
+        { type: 'separator' },
+        {
+          label: '彻底退出',
+          click: () => {
+            quitting = true;
+            app.quit();
+          }
+        }
+      ]));
+      tray.on('click', () => showMainWindow());
+    } catch (e) { errlog('tray', e); }
+  }
+
   const menu = Menu.buildFromTemplate([
     {
       label: '文件',
@@ -292,6 +352,24 @@ if (!gotLock) {
       ]
     },
     {
+      label: '设置',
+      submenu: [
+        { label: '关闭窗口时', enabled: false },
+        {
+          type: 'radio',
+          label: '彻底关闭',
+          checked: !isTrayClose(),
+          click: () => saveCloseBehavior('exit')
+        },
+        {
+          type: 'radio',
+          label: '最小化到托盘(不退出服务)',
+          checked: isTrayClose(),
+          click: () => saveCloseBehavior('tray')
+        }
+      ]
+    },
+    {
       label: '帮助',
       submenu: [
         { label: '服务地址: ' + SERVER_URL, enabled: false },
@@ -317,6 +395,8 @@ if (!gotLock) {
   Menu.setApplicationMenu(menu);
 
   app.whenReady().then(() => {
+    loadSettings();
+    createTray();
     createWindow();
     ensureServer(); // 服务没起就静默拉起,离线页会自动重连
     app.on('activate', () => {
@@ -330,6 +410,7 @@ if (!gotLock) {
 
   let quitChecked = false;
   app.on('before-quit', (e) => {
+    quitting = true;
     if (quitChecked) return;
     // 服务不是本应用启动的 → 一律不动,直接退出
     if (!serverChild) return;
