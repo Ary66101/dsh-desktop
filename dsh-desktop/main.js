@@ -172,7 +172,7 @@ if (!gotLock) {
       minWidth: 860,
       minHeight: 560,
       title: 'DeepSeek Harness 桌面端',
-      icon: path.join(__dirname, 'logo-black.png'),
+      icon: path.join(__dirname, 'logo-v3.png'),
       backgroundColor: '#f5faff',
       autoHideMenuBar: false,
       webPreferences: {
