@@ -223,10 +223,11 @@ window.__ModuleLoader__.load({
             return
           }
           setText(picked.text)
+          const w = Math.max(0, Math.min(spRect.width - 32, 640))
           const next = {
             top: spRect.top + 8,
-            left: spRect.left + (spRect.width - next.width) / 2,
-            width: Math.max(0, Math.min(spRect.width - 32, 640)),
+            left: spRect.left + (spRect.width - w) / 2,
+            width: w,
           }
           const prev = frameRef.current
           if (!prev || prev.top !== next.top || prev.left !== next.left || prev.width !== next.width) {
