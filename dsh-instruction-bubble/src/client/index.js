@@ -210,6 +210,7 @@ function InstructionBubble(props) {
 export function apply(ctx) {
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
+    id: 'dsh-instruction-bubble', // list slot requires options.id (DSH >= 0.1.0-rc.6)
     priority: 10,
     registrant: 'dsh-instruction-bubble',
     inject: () => ({ sessions: ctx.sessions }),
