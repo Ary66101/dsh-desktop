@@ -411,6 +411,7 @@ function injectStyles() {
   z-index: 60;
   pointer-events: none;
   box-sizing: border-box;
+  max-width: calc(100vw - 32px);
   padding: 5px 14px;
   border-radius: 999px;
   background: var(--dsw-alias-bg-module-platform, rgba(24, 24, 27, 0.72));
@@ -452,20 +453,37 @@ function useCurrentSessionSnapshot(sessions, sessionId) {
 /** The floating bubble. Registered into the shell.overlay slot. */
 function InstructionBubble(props) {
   const { useSessions, sessions } = props
-  const list = useSessions()
-  const sessionId = list && list.current
+  const sessionId = useSessions((s) => (s ? s.current : undefined))
   const snapshot = useCurrentSessionSnapshot(sessions, sessionId)
 
   const [text, setText] = useState(null)
   const [frame, setFrame] = useState(null)
 
   const snapshotRef = useRef(snapshot)
-  snapshotRef.current = snapshot
+  const scheduleRef = useRef(null)
+  const frameRef = useRef(null)
+
+  // Keep the latest snapshot for the rAF/interval callbacks.
+  useEffect(() => {
+    snapshotRef.current = snapshot
+  })
+
+  // Recompute when the conversation snapshot publishes (new messages,
+  // streaming, loadOlder, blank/removed flips). Coalesced by schedule().
+  useEffect(() => {
+    if (scheduleRef.current) scheduleRef.current()
+  }, [snapshot])
 
   useEffect(() => {
-    if (!sessionId) {
+    const hide = () => {
+      frameRef.current = null
       setText(null)
       setFrame(null)
+    }
+
+    if (!sessionId) {
+      scheduleRef.current = null
+      hide()
       return undefined
     }
 
@@ -481,24 +499,22 @@ function InstructionBubble(props) {
         if (!disposed) recompute()
       })
     }
+    scheduleRef.current = schedule
 
     const recompute = () => {
       const snap = snapshotRef.current
       if (!snap || snap.removed || snap.blank) {
-        setText(null)
-        setFrame(null)
+        hide()
         return
       }
       const sp = document.querySelector('[data-conversation-scroll]')
       if (!sp) {
-        setText(null)
-        setFrame(null)
+        hide()
         return
       }
       const instructions = collectInstructions(snap)
       if (instructions.length === 0) {
-        setText(null)
-        setFrame(null)
+        hide()
         return
       }
       const rects = new Map()
@@ -511,21 +527,29 @@ function InstructionBubble(props) {
       const spRect = sp.getBoundingClientRect()
       const picked = pickInstruction(instructions, rects, spRect.top, EPSILON_PX)
       if (!picked || !picked.text) {
-        setText(null)
-        setFrame(null)
+        hide()
         return
       }
       setText(picked.text)
-      setFrame({
+      const next = {
         top: spRect.top + 8,
         left: spRect.left + 16,
-        width: Math.max(160, Math.min(spRect.width - 32, 640)),
-      })
+        width: Math.max(0, Math.min(spRect.width - 32, 640)),
+      }
+      const prev = frameRef.current
+      if (!prev || prev.top !== next.top || prev.left !== next.left || prev.width !== next.width) {
+        frameRef.current = next
+        setFrame(next)
+      }
     }
 
     const onWindowResize = () => schedule()
     const onScrollportScroll = () => schedule()
+    const onVisibilityChange = () => {
+      if (!document.hidden) schedule()
+    }
     window.addEventListener('resize', onWindowResize)
+    document.addEventListener('visibilitychange', onVisibilityChange)
 
     // Poll for scrollport presence/absence (view switches) and drift; all
     // other sources are rAF-throttled.
@@ -543,7 +567,10 @@ function InstructionBubble(props) {
 
     return () => {
       disposed = true
+      scheduleRef.current = null
+      frameRef.current = null
       window.removeEventListener('resize', onWindowResize)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
       if (scrollport) scrollport.removeEventListener('scroll', onScrollportScroll)
       if (timer) clearInterval(timer)
       if (raf !== 0) cancelAnimationFrame(raf)
@@ -567,6 +594,9 @@ export function apply(ctx) {
     inject: () => ({ sessions: ctx.sessions }),
   }, InstructionBubble))
 }
+```
+
+> 计划更正注 3（Task 3 代码审查后修订）：① `useSessions` 必须传选择器（root-scope 标准 kit 的 hook 是 `bindSnapshotSelector`，无参调用在挂载即抛 `selector is not a function`——已实测核心 shim 验证）；② 新增 `[snapshot]` effect + `visibilitychange` 监听，快照发布/回到前台立即触发 rAF 节流重算（后台标签页 setInterval 会被浏览器节流）；③ `frameRef` 去重避免每次 tick 无谓 setFrame 重渲染（hide() 时清空防陈旧帧）；④ `getSnapshot` 去掉多余参数；⑤ 宽度钳制改 `Math.max(0, …)` + 样式 `max-width: calc(100vw - 32px)`；⑥ `snapshotRef` 改在 effect 中写入。
 ```
 
 - [ ] **Step 2: 静态冒烟检查（不依赖 react 安装）**
