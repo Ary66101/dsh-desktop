@@ -42,7 +42,7 @@ function toBody(src, label) {
   // Exports → declarations (single-name forms used here).
   out = out.replace(/export\s+function\s+/g, 'function ')
   out = out.replace(/export\s+const\s+/g, 'const ')
-  out = out.replace(/export\s*\{\s*[^}]*\}\s*;?/g, '')
+  out = out.replace(/export\s*\{\s*[^}]*\};?/g, '')
   if (/\b(import|export)\s/.test(out)) {
     throw new Error(`untransformed ESM statement remains in ${label}`)
   }
