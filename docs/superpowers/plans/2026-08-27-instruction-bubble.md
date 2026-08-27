@@ -253,6 +253,21 @@ test('pickInstruction: 没有任何滚出时回退为第一条', () => {
   assert.equal(pickInstruction(list, rects, 30, 4).key, 'a')
   assert.equal(pickInstruction([], rects, 30, 4), null)
 })
+
+test('pickInstruction: 首条无 rect 时回退为第一条有 rect 的指令', () => {
+  const list = [{ key: 'a', text: '甲' }, { key: 'b', text: '乙' }, { key: 'c', text: '丙' }]
+  const rects = new Map([
+    ['b', { bottom: 60 }],
+    ['c', { bottom: 90 }],
+  ])
+  assert.equal(pickInstruction(list, rects, 30, 4).key, 'b')
+})
+
+test('instructionTextOf: 全角空格/换行折叠为半角空格，纯空白块被跳过', () => {
+  assert.equal(instructionTextOf({ content: [{ type: 'text', text: '甲\u3000\n乙' }] }), '甲 乙')
+  assert.equal(instructionTextOf({ content: [{ type: 'text', text: '   ' }] }), '')
+  assert.equal(instructionTextOf({ content: [{ type: 'image' }] }), '[图片]')
+})
 ```
 
 - [ ] **Step 2: 运行测试确认失败**
@@ -310,20 +325,25 @@ export function collectInstructions(snapshot) {
 
 /**
  * Choose which instruction the bubble shows.
- * @param {readonly {key: string, text: string}[]} instructions — chronological order
- * @param {ReadonlyMap<string, {bottom: number}>} rects — message-box bottom (viewport px) by key
+ * @param {{key: string, text: string}[]} instructions — chronological order
+ * @param {Map<string, {bottom: number}>} rects — message-box bottom (viewport px) by key
  * @param {number} foldTop — transcript viewport top edge (viewport px)
  * @param {number} epsilon — tolerance (px); <= foldTop + epsilon counts as "scrolled out"
  * @returns {{key: string, text: string} | null}
  */
 export function pickInstruction(instructions, rects, foldTop, epsilon) {
+  if (!rects || typeof rects.get !== 'function') {
+    return instructions.length > 0 ? instructions[0] : null
+  }
   let passed = null
+  let firstVisible = null
   for (const item of instructions) {
     const rect = rects.get(item.key)
     if (!rect) continue
+    if (firstVisible === null) firstVisible = item
     if (rect.bottom <= foldTop + epsilon) passed = item
   }
-  return passed || (instructions.length > 0 ? instructions[0] : null)
+  return passed || firstVisible
 }
 ```
 
@@ -333,9 +353,10 @@ export function pickInstruction(instructions, rects, foldTop, epsilon) {
 node --test test/
 ```
 
-预期：`# pass 8`、`# fail 0`（全部通过）。
+预期：`# pass 10`、`# fail 0`（全部通过）。
 
-> 计划更正注：测试文件含 8 个 `test()` 块（Task 2 的"全部滚出"夹具原稿 `b: {bottom: 40}` 与算法阈值 34 矛盾——40 > 34 未滚出，断言无法通过，属计划缺陷；已修正为 `{bottom: 30}`，rule.js 保持不变）。
+> 计划更正注 1：测试文件含 10 个 `test()` 块（Task 2 的"全部滚出"夹具原稿 `b: {bottom: 40}` 与算法阈值 34 矛盾——40 > 34 未滚出，断言无法通过，属计划缺陷；已修正为 `{bottom: 30}`）。
+> 计划更正注 2：`pickInstruction` 回退逻辑经代码审查修正为"最近已滚出 → 第一条**有 rect** 的指令 → null"（原稿 `instructions[0]` 在首条无 DOM 行/键缺失时与"视野内最靠上的指令"不符）；同时补了缺失-rect 与全角空白折叠两个测试。
 
 - [ ] **Step 5: 提交**
 
@@ -779,7 +800,7 @@ node scripts/build.mjs   # 生成 lib/client.js（__ModuleLoader__.load 注册�
 - [ ] **Step 3: 全量回归 + 提交**
 
 ```bash
-node --test test/            # 预期 # pass 8 / # fail 0（沙箱内改用 node test/rule.test.mjs）
+node --test test/            # 预期 # pass 10 / # fail 0（沙箱内改用 node test/rule.test.mjs）
 node scripts/build.mjs       # 产物与源码一致（重新生成后 diff 为空）
 git status --short
 ```
