@@ -22,7 +22,7 @@
 ## 文件结构
 
 ```
-D:\deepseek harness\dsh-instruction-bubble\          ← 新插件包（本仓库内）
+dsh-instruction-bubble\          ← 新插件包（本仓库内）
 ├─ package.json            包的元信息 + dsh.client 声明 + 构建/测试脚本
 ├─ cordis.patch.yml        dsh.bundle.patch 挂载行（Loader 条目）
 ├─ README.md               使用与开发说明
@@ -45,10 +45,10 @@ D:\deepseek harness\dsh-instruction-bubble\          ← 新插件包（本仓�
 ## Task 1: 插件包脚手架
 
 **Files:**
-- Create: `D:\deepseek harness\dsh-instruction-bubble\package.json`
-- Create: `D:\deepseek harness\dsh-instruction-bubble\cordis.patch.yml`
-- Create: `D:\deepseek harness\dsh-instruction-bubble\lib\index.js`
-- Create: `D:\deepseek harness\dsh-instruction-bubble\.gitignore`
+- Create: `dsh-instruction-bubble\package.json`
+- Create: `dsh-instruction-bubble\cordis.patch.yml`
+- Create: `dsh-instruction-bubble\lib\index.js`
+- Create: `dsh-instruction-bubble\.gitignore`
 
 - [ ] **Step 1: 创建 package.json**
 
@@ -134,7 +134,7 @@ node_modules/
 
 - [ ] **Step 5: 语法检查**
 
-运行（在 `D:\deepseek harness` 下）：
+运行（在 `仓库根目录` 下）：
 
 ```bash
 node --check "dsh-instruction-bubble/lib/index.js"
@@ -143,7 +143,7 @@ node --check "dsh-instruction-bubble/lib/index.js"
 注意：`--check` 对 ESM 文件（package.json `"type": "module"`）在 Node ≥ 22 直接生效；若报 "Cannot use import statement outside a module" 则改用：
 
 ```bash
-node -e "import('file:///D:/deepseek%20harness/dsh-instruction-bubble/lib/index.js').then(() => console.log('ok'))"
+node -e "import('./dsh-instruction-bubble/lib/index.js').then(() => console.log('ok'))"
 ```
 
 预期：`ok`（或 `--check` 无输出、退出码 0）。
@@ -160,8 +160,8 @@ git commit -m "feat(instruction-bubble): 插件包脚手架（package.json / bun
 ## Task 2: 纯逻辑 rule.js（TDD）
 
 **Files:**
-- Create: `D:\deepseek harness\dsh-instruction-bubble\src\client\rule.js`
-- Create: `D:\deepseek harness\dsh-instruction-bubble\test\rule.test.mjs`
+- Create: `dsh-instruction-bubble\src\client\rule.js`
+- Create: `dsh-instruction-bubble\test\rule.test.mjs`
 
 - [ ] **Step 1: 写失败的测试**
 
@@ -273,7 +273,7 @@ test('instructionTextOf: 全角空格/换行折叠为半角空格，纯空白块
 - [ ] **Step 2: 运行测试确认失败**
 
 ```bash
-cd "D:\deepseek harness\dsh-instruction-bubble"
+cd "dsh-instruction-bubble"
 node --test test/
 ```
 
@@ -370,7 +370,7 @@ git commit -m "feat(instruction-bubble): 指令选择纯逻辑 rule.js 及单测
 ## Task 3: 浏览器入口 index.js（组件 + 接线）
 
 **Files:**
-- Create: `D:\deepseek harness\dsh-instruction-bubble\src\client\index.js`
+- Create: `dsh-instruction-bubble\src\client\index.js`
 
 - [ ] **Step 1: 实现客户端入口**
 
@@ -637,9 +637,9 @@ git commit -m "feat(instruction-bubble): 浏览器入口组件与插槽接线（
 ## Task 4: 构建脚本与 client 产物
 
 **Files:**
-- Create: `D:\deepseek harness\dsh-instruction-bubble\scripts\build.mjs`
-- Create: `D:\deepseek harness\dsh-instruction-bubble\.gitattributes`（`* text eol=lf`，保证跨检出 LF 不变）
-- Create: `D:\deepseek harness\dsh-instruction-bubble\lib\client.js`（生成产物，提交）
+- Create: `dsh-instruction-bubble\scripts\build.mjs`
+- Create: `dsh-instruction-bubble\.gitattributes`（`* text eol=lf`，保证跨检出 LF 不变）
+- Create: `dsh-instruction-bubble\lib\client.js`（生成产物，提交）
 
 - [ ] **Step 1: 实现 scripts/build.mjs**
 
@@ -764,27 +764,27 @@ git commit -m "feat(instruction-bubble): 构建脚本与 lib/client.js 产物（
 ## Task 5: 安装进 profile web 并验证加载
 
 **Files（仓库外，告知即可）:**
-- Modify: `C:\Users\ASUS\.dsh\profiles\web\package.json`（pnpm 自动追加依赖）
-- Modify: `C:\Users\ASUS\.dsh\profiles\web\node_modules\`（pnpm 自动写入）
+- Modify: `~\.dsh\profiles\web\package.json`（pnpm 自动追加依赖）
+- Modify: `~\.dsh\profiles\web\node_modules\`（pnpm 自动写入）
 
 - [ ] **Step 1: 用 link: 安装（开发期可即时重建刷新）**
 
 ```bash
-cd "C:\Users\ASUS\.dsh\profiles\web"
-pnpm add "link:D:/deepseek harness/dsh-instruction-bubble"
+cd "~\.dsh\profiles\web"
+pnpm add "link:dsh-instruction-bubble"
 ```
 
-预期：`dependencies` 里出现 `"dsh-instruction-bubble": "link:D:/deepseek harness/dsh-instruction-bubble"`，`node_modules/dsh-instruction-bubble` 为指向源码目录的符号链接。
+预期：`dependencies` 里出现 `"dsh-instruction-bubble": "link:dsh-instruction-bubble"`，`node_modules/dsh-instruction-bubble` 为指向源码目录的符号链接。
 
 若 `link:` 因路径含空格失败，退而求其次：
 
 ```bash
-pnpm add "file:D:/deepseek harness/dsh-instruction-bubble"
+pnpm add "file:dsh-instruction-bubble"
 ```
 
 （本包零 dependencies、无安装脚本，不会被 pnpm 的 build-script 拦截。）
 
-> 计划更正注 5（Task 5 实测记录）：`pnpm add link:` 在本机被 pnpm 11 的 `minimumReleaseAge` supply-chain 策略拦截（lockfile 中 @linxin666/* 条目发布不足 24h；项目级 `.npmrc` 设 `minimumReleaseAge=0` 实测无效，该键未被 pnpm 读取）。改用确定性手工安装：① 在 profile 的 `node_modules` 创建指向源码目录的 **junction**（`New-Item -ItemType Junction`）；② `package.json` 的 `dependencies` 追加 `"dsh-instruction-bubble": "link:D:/deepseek harness/dsh-instruction-bubble"`。**关键：boot 图由 `dsh.profile.bundles` 栈组成（better-sidebar 能加载是因为聚合包 @linxin666/dsh-web-ui-all 的 patch 显式挂载它，并非扫描 node_modules）——因此还必须把 `dsh-instruction-bubble` 追加进 `dsh.profile.bundles`，否则插件包 404 且不出现在 boot 图。** **且 boot 图在服务器启动时组成——改完需用户手动重启 `dsh web` 并硬刷新**（代理会话依赖该 GUI，禁止从会话内杀/重启该服务）。
+> 计划更正注 5（Task 5 实测记录）：`pnpm add link:` 在本机被 pnpm 11 的 `minimumReleaseAge` supply-chain 策略拦截（lockfile 中 @linxin666/* 条目发布不足 24h；项目级 `.npmrc` 设 `minimumReleaseAge=0` 实测无效，该键未被 pnpm 读取）。改用确定性手工安装：① 在 profile 的 `node_modules` 创建指向源码目录的 **junction**（`New-Item -ItemType Junction`）；② `package.json` 的 `dependencies` 追加 `"dsh-instruction-bubble": "link:dsh-instruction-bubble"`。**关键：boot 图由 `dsh.profile.bundles` 栈组成（better-sidebar 能加载是因为聚合包 @linxin666/dsh-web-ui-all 的 patch 显式挂载它，并非扫描 node_modules）——因此还必须把 `dsh-instruction-bubble` 追加进 `dsh.profile.bundles`，否则插件包 404 且不出现在 boot 图。** **且 boot 图在服务器启动时组成——改完需用户手动重启 `dsh web` 并硬刷新**（代理会话依赖该 GUI，禁止从会话内杀/重启该服务）。
 
 - [ ] **Step 2: 硬刷新 GUI 验证加载**
 
@@ -809,7 +809,7 @@ fetch('/plugins/dsh-instruction-bubble/client.js').then(r => console.log('plugin
 ## Task 6: 端到端功能验证 + README
 
 **Files:**
-- Create: `D:\deepseek harness\dsh-instruction-bubble\README.md`
+- Create: `dsh-instruction-bubble\README.md`
 
 - [ ] **Step 1: 按验收清单逐项验证（对照规格 §7）**
 
@@ -843,7 +843,7 @@ DSH Web GUI 客户端插件：在会话顶部（对话区视口上沿）悬浮�
 
 ```bash
 cd ~/.dsh/profiles/web
-pnpm add "link:D:/deepseek harness/dsh-instruction-bubble"
+pnpm add "link:dsh-instruction-bubble"
 ```
 
 硬刷新 `http://127.0.0.1:3080`；若 boot 图未刷新，重启 `dsh web` 后再刷新。

@@ -10,16 +10,16 @@ DSH Web GUI 客户端插件：在会话顶部（对话区视口上沿）悬浮�
 - 纯展示：`pointer-events: none`，不拦截任何鼠标操作。
 - 与主题联动：使用 `--dsw-alias-*` 主题令牌（暗/亮自适应）、背景模糊、≤2 行截断、小字号。
 
-## 安装（本机实测路径）
+## 安装（实测路径，请替换为你的实际路径）
 
 由于 pnpm 11 的 `minimumReleaseAge` 策略会拦截本 profile 的 lockfile 校验（@linxin666/* 条目发布不足 24h；项目级 `.npmrc` 设 `minimumReleaseAge=0` 实测无效），实际采用确定性手工安装：
 
 ```powershell
 # 1) node_modules 里建 junction 指向源码目录（实时生效，改产物无需重启）
-New-Item -ItemType Junction -Path "C:\Users\ASUS\.dsh\profiles\web\node_modules\dsh-instruction-bubble" -Target "D:\deepseek harness\dsh-instruction-bubble"
+New-Item -ItemType Junction -Path "$HOME\.dsh\profiles\web\node_modules\dsh-instruction-bubble" -Target "<本插件源码目录的绝对路径>"
 
 # 2) profile package.json 记录依赖 + 加入 bundles 栈（boot 图由 dsh.profile.bundles 组成）
-#    dependencies:  "dsh-instruction-bubble": "link:D:/deepseek harness/dsh-instruction-bubble"
+#    dependencies:  "dsh-instruction-bubble": "link:<本插件源码目录的绝对路径>"
 #    dsh.profile.bundles 追加: "dsh-instruction-bubble"
 
 # 3) 重启 dsh web（boot 图在启动时组成 + 缓存），硬刷新 http://127.0.0.1:3080

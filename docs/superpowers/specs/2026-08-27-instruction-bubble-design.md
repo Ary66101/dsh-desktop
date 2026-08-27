@@ -43,7 +43,7 @@
 
 - 包结构：`package.json`（含 `dsh.client` 声明：`platform: "web"`，`inject` 列表）+ 浏览器端入口（`./client → lib/client.js`，由 `tsdown` 构建）+ `dsh.bundle.patch`（`cordis.patch.yml`，`insert` 挂载行）；
 - `inject` 至少包含：`@deepseek-ai/dsh-client-runtime`、`@deepseek-ai/dsh-client-locale`、`@deepseek-ai/dsh-client-ui-slots`、`@deepseek-ai/dsh-client-ui-conversation`、`@deepseek-ai/dsh-client-modules`；
-- 代码存放：工作区仓库 `D:\deepseek harness\dsh-instruction-bubble\`（本仓库已受 Git 管理）。
+- 代码存放：工作区仓库 `dsh-instruction-bubble/`（本仓库已受 Git 管理）。
 
 ### 2.2 挂载点
 
@@ -83,7 +83,7 @@
 
 ## 5. 交付方式
 
-1. 在 `D:\deepseek harness\dsh-instruction-bubble\` 创建插件包（含 `dsh.bundle.patch` 挂载行）；
+1. 在 `dsh-instruction-bubble/` 创建插件包（含 `dsh.bundle.patch` 挂载行）；
 2. 构建出 `lib/client.js`（tsdown，参照 better-sidebar 脚本）；
 3. 接入 profile `web`：走 `dsh plugin --profile web add <包>` 类通道（本地包可用 `pnpm add file:...` 或等价方式），确保 `dsh.profile.bundles` 追加本包；
 4. 验证：硬刷新 `http://127.0.0.1:3080`（客户端改动无需重启 DSH；若需要重建 bundle，按核心说明执行构建并刷新）。
