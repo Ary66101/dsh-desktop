@@ -589,6 +589,7 @@ function InstructionBubble(props) {
 export function apply(ctx) {
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
+    id: 'dsh-instruction-bubble', // list slot requires options.id (DSH >= 0.1.0-rc.6)
     priority: 10,
     registrant: 'dsh-instruction-bubble',
     inject: () => ({ sessions: ctx.sessions }),
@@ -597,6 +598,8 @@ export function apply(ctx) {
 ```
 
 > 计划更正注 3（Task 3 代码审查后修订）：① `useSessions` 必须传选择器（root-scope 标准 kit 的 hook 是 `bindSnapshotSelector`，无参调用在挂载即抛 `selector is not a function`——已实测核心 shim 验证）；② 新增 `[snapshot]` effect + `visibilitychange` 监听，快照发布/回到前台立即触发 rAF 节流重算（后台标签页 setInterval 会被浏览器节流）；③ `frameRef` 去重避免每次 tick 无谓 setFrame 重渲染（hide() 时清空防陈旧帧）；④ `getSnapshot` 去掉多余参数；⑤ 宽度钳制改 `Math.max(0, …)` + 样式 `max-width: calc(100vw - 32px)`；⑥ `snapshotRef` 改在 effect 中写入。
+
+> 计划更正注 6（实测崩溃修正）：`shell.overlay`（list 型插槽）注册**必须带 `options.id`**（DSH ≥ 0.1.0-rc.6 的插槽运行时要求；dshmarket 等插件均传如 `id: 'dsh-market-toast'`）。原注册缺 `id`，loader 应用条目时直接抛错，导致整个 GUI 启动中止并显示 "Failed to load plugins"。修复：注册选项补充 `id: 'dsh-instruction-bubble'` 并重建 `lib/client.js`（commit `25e6971`；junction 使产物实时生效，无需重启服务）。**若照本计划重建插件，请确保注册时带 id。**
 ```
 
 - [ ] **Step 2: 静态冒烟检查（不依赖 react 安装）**
