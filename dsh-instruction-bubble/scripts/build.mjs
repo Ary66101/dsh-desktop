@@ -19,20 +19,20 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const PACKAGE_ID = 'dsh-instruction-bubble'
 
 /** Turn one ESM source file into factory-body CJS text. */
-function toBody(src) {
-  let out = src
+function toBody(src, label) {
+  let out = src.replace(/\r\n/g, '\n') // ending-agnostic: LF-only splicing
   // Combined import: `import React, { a, b } from 'react'`
   out = out.replace(
-    /import\s+([A-Za-z_$][\w$]*)\s*,\s*\{\s*([\w$,\s]+?)\s*\}\s+from\s+['"]([^'"]+)['"]\s*;?/g,
+    /import\s+([A-Za-z_$][\w$]*)\s*,\s*\{\s*([\w$,\s]+?)\s*\}\s+from\s+['"]([^'"]+)['"];?/g,
     (_m, defaultName, named, spec) => {
-      if (spec.startsWith('.')) throw new Error(`combined import from relative module not supported: ${spec}`)
+      if (spec.startsWith('.')) throw new Error(`combined import from relative module not supported in ${label}: ${spec}`)
       const names = named.split(',').map((s) => s.trim()).filter(Boolean)
       return `const ${defaultName} = require(${JSON.stringify(spec)});\nconst { ${names.join(', ')} } = ${defaultName};`
     }
   )
   // Named-only import: `import { a, b } from 'x'` (relative: spliced, line dropped)
   out = out.replace(
-    /import\s*\{\s*([\w$,\s]+?)\s*\}\s+from\s+['"]([^'"]+)['"]\s*;?/g,
+    /import\s*\{\s*([\w$,\s]+?)\s*\}\s+from\s+['"]([^'"]+)['"];?/g,
     (_m, named, spec) => {
       if (spec.startsWith('.')) return ''
       const names = named.split(',').map((s) => s.trim()).filter(Boolean)
@@ -43,6 +43,9 @@ function toBody(src) {
   out = out.replace(/export\s+function\s+/g, 'function ')
   out = out.replace(/export\s+const\s+/g, 'const ')
   out = out.replace(/export\s*\{\s*[^}]*\}\s*;?/g, '')
+  if (/\b(import|export)\s/.test(out)) {
+    throw new Error(`untransformed ESM statement remains in ${label}`)
+  }
   return out
 }
 
@@ -50,8 +53,8 @@ const ruleSrc = readFileSync(join(root, 'src', 'client', 'rule.js'), 'utf8')
 const entrySrc = readFileSync(join(root, 'src', 'client', 'index.js'), 'utf8')
 
 const body =
-  toBody(ruleSrc) + '\n' +
-  toBody(entrySrc) + '\n' +
+  toBody(ruleSrc, 'rule.js') + '\n' +
+  toBody(entrySrc, 'index.js') + '\n' +
   'exports.apply = apply;\n' +
   'exports.inject = inject;\n'
 

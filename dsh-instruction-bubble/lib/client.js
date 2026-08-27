@@ -78,7 +78,10 @@ window.__ModuleLoader__.load({
      * The selection rule lives in rule.js; this file only wires it to the DOM.
      */
     const React = require("react");
-    const { useEffect, useRef, useState, useSyncExternalStore, useCallback } = React;/** Cordis services this entry needs before apply (client context). */
+    const { useEffect, useRef, useState, useSyncExternalStore, useCallback } = React;
+    
+    
+    /** Cordis services this entry needs before apply (client context). */
     const inject = ['slots', 'sessions']
     
     const STYLE_ID = 'dsh-instruction-bubble-css'
