@@ -766,6 +766,8 @@ pnpm add "file:D:/deepseek harness/dsh-instruction-bubble"
 
 （本包零 dependencies、无安装脚本，不会被 pnpm 的 build-script 拦截。）
 
+> 计划更正注 5（Task 5 实测记录）：`pnpm add link:` 在本机被 pnpm 11 的 `minimumReleaseAge` supply-chain 策略拦截（lockfile 中 @linxin666/* 条目发布不足 24h；项目级 `.npmrc` 设 `minimumReleaseAge=0` 实测无效，该键未被 pnpm 读取）。改用确定性手工安装：① 在 profile 的 `node_modules` 创建指向源码目录的 **junction**（`New-Item -ItemType Junction`）；② `package.json` 的 `dependencies` 追加 `"dsh-instruction-bubble": "link:D:/deepseek harness/dsh-instruction-bubble"`。boot 图会扫描 node_modules 中的 `dsh.bundle.patch` 包（better-sidebar 即如此加载，且不在 bundles 列表），无需 pnpm。**注意：boot 图在服务器启动时组成——安装后需用户手动重启 `dsh web` 并硬刷新**（代理会话依赖该 GUI，禁止从会话内杀/重启该服务）。
+
 - [ ] **Step 2: 硬刷新 GUI 验证加载**
 
 打开 `http://127.0.0.1:3080`，按 `Ctrl+Shift+R` 硬刷新，再打开任意有多轮历史的会话，确认视野顶部出现悬浮气泡。
