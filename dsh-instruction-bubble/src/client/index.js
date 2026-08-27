@@ -1,0 +1,190 @@
+/**
+ * Browser half of dsh-instruction-bubble.
+ *
+ * Registered into the shell.overlay slot (root scope, additive): a floating
+ * bubble pinned to the top edge of the transcript scrollport
+ * ([data-conversation-scroll]) showing the last user instruction whose
+ * message row has scrolled out of view, switching backward as the user
+ * scrolls up. Instruction rows are located through the stable chat-flow
+ * attributes ([data-chat-flow-kind="user"|"steering"] + data-chat-flow-key).
+ * The selection rule lives in rule.js; this file only wires it to the DOM.
+ */
+import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback } from 'react'
+import { collectInstructions, pickInstruction } from './rule.js'
+
+/** Cordis services this entry needs before apply (client context). */
+export const inject = ['slots', 'sessions']
+
+const STYLE_ID = 'dsh-instruction-bubble-css'
+const EPSILON_PX = 4
+const POLL_MS = 500
+
+/** Inject the bubble stylesheet once at module materialization (loader owns it). */
+function injectStyles() {
+  if (document.getElementById(STYLE_ID)) return
+  const style = document.createElement('style')
+  style.id = STYLE_ID
+  style.dataset.plugin = 'dsh-instruction-bubble'
+  style.dataset.pluginCss = STYLE_ID
+  style.textContent = `
+#dsh-instruction-bubble {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  box-sizing: border-box;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-module-platform, rgba(24, 24, 27, 0.72));
+  border: 1px solid var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.35));
+  box-shadow: var(--dsw-shadow-lv2, 0 2px 10px rgba(0, 0, 0, 0.18));
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: var(--dsw-alias-label-secondary, #d4d4d8);
+  font-family: var(--dsw-font-family, system-ui, -apple-system, sans-serif);
+  font-size: 12px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+`
+  document.head.appendChild(style)
+}
+injectStyles()
+
+/** uSES subscription to the current session's ConversationSnapshot. */
+function useCurrentSessionSnapshot(sessions, sessionId) {
+  const subscribe = useCallback((onStoreChange) => {
+    if (!sessionId) return () => {}
+    const binding = sessions.binding(sessionId)
+    return binding ? binding.session.subscribe(onStoreChange) : () => {}
+  }, [sessions, sessionId])
+  const getSnapshot = useCallback((onStoreChange) => {
+    if (!sessionId) return undefined
+    const binding = sessions.binding(sessionId)
+    return binding ? binding.session.getSnapshot() : undefined
+  }, [sessions, sessionId])
+  return useSyncExternalStore(subscribe, getSnapshot)
+}
+
+/** The floating bubble. Registered into the shell.overlay slot. */
+function InstructionBubble(props) {
+  const { useSessions, sessions } = props
+  const list = useSessions()
+  const sessionId = list && list.current
+  const snapshot = useCurrentSessionSnapshot(sessions, sessionId)
+
+  const [text, setText] = useState(null)
+  const [frame, setFrame] = useState(null)
+
+  const snapshotRef = useRef(snapshot)
+  snapshotRef.current = snapshot
+
+  useEffect(() => {
+    if (!sessionId) {
+      setText(null)
+      setFrame(null)
+      return undefined
+    }
+
+    let raf = 0
+    let timer = null
+    let scrollport = null
+    let disposed = false
+
+    const schedule = () => {
+      if (raf !== 0) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        if (!disposed) recompute()
+      })
+    }
+
+    const recompute = () => {
+      const snap = snapshotRef.current
+      if (!snap || snap.removed || snap.blank) {
+        setText(null)
+        setFrame(null)
+        return
+      }
+      const sp = document.querySelector('[data-conversation-scroll]')
+      if (!sp) {
+        setText(null)
+        setFrame(null)
+        return
+      }
+      const instructions = collectInstructions(snap)
+      if (instructions.length === 0) {
+        setText(null)
+        setFrame(null)
+        return
+      }
+      const rects = new Map()
+      for (const el of sp.querySelectorAll('[data-chat-flow-kind="user"], [data-chat-flow-kind="steering"]')) {
+        const key = el.dataset.chatFlowKey
+        if (!key) continue
+        const r = el.getBoundingClientRect()
+        rects.set(key, { bottom: r.bottom })
+      }
+      const spRect = sp.getBoundingClientRect()
+      const picked = pickInstruction(instructions, rects, spRect.top, EPSILON_PX)
+      if (!picked || !picked.text) {
+        setText(null)
+        setFrame(null)
+        return
+      }
+      setText(picked.text)
+      setFrame({
+        top: spRect.top + 8,
+        left: spRect.left + 16,
+        width: Math.max(160, Math.min(spRect.width - 32, 640)),
+      })
+    }
+
+    const onWindowResize = () => schedule()
+    const onScrollportScroll = () => schedule()
+    window.addEventListener('resize', onWindowResize)
+
+    // Poll for scrollport presence/absence (view switches) and drift; all
+    // other sources are rAF-throttled.
+    const tick = () => {
+      const found = document.querySelector('[data-conversation-scroll]')
+      if (found !== scrollport) {
+        if (scrollport) scrollport.removeEventListener('scroll', onScrollportScroll)
+        scrollport = found
+        if (scrollport) scrollport.addEventListener('scroll', onScrollportScroll)
+      }
+      recompute()
+    }
+    tick()
+    timer = setInterval(tick, POLL_MS)
+
+    return () => {
+      disposed = true
+      window.removeEventListener('resize', onWindowResize)
+      if (scrollport) scrollport.removeEventListener('scroll', onScrollportScroll)
+      if (timer) clearInterval(timer)
+      if (raf !== 0) cancelAnimationFrame(raf)
+    }
+  }, [sessionId])
+
+  if (!text || !frame) return null
+  return React.createElement(
+    'div',
+    { id: 'dsh-instruction-bubble', style: frame },
+    text
+  )
+}
+
+/** Register the bubble into the shell.overlay slot (root scope, additive). */
+export function apply(ctx) {
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    priority: 10,
+    registrant: 'dsh-instruction-bubble',
+    inject: () => ({ sessions: ctx.sessions }),
+  }, InstructionBubble))
+}
