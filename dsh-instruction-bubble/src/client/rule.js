@@ -39,18 +39,23 @@ export function collectInstructions(snapshot) {
 
 /**
  * Choose which instruction the bubble shows.
- * @param {readonly {key: string, text: string}[]} instructions — chronological order
- * @param {ReadonlyMap<string, {bottom: number}>} rects — message-box bottom (viewport px) by key
+ * @param {{key: string, text: string}[]} instructions — chronological order
+ * @param {Map<string, {bottom: number}>} rects — message-box bottom (viewport px) by key
  * @param {number} foldTop — transcript viewport top edge (viewport px)
  * @param {number} epsilon — tolerance (px); <= foldTop + epsilon counts as "scrolled out"
  * @returns {{key: string, text: string} | null}
  */
 export function pickInstruction(instructions, rects, foldTop, epsilon) {
+  if (!rects || typeof rects.get !== 'function') {
+    return instructions.length > 0 ? instructions[0] : null
+  }
   let passed = null
+  let firstVisible = null
   for (const item of instructions) {
     const rect = rects.get(item.key)
     if (!rect) continue
+    if (firstVisible === null) firstVisible = item
     if (rect.bottom <= foldTop + epsilon) passed = item
   }
-  return passed || (instructions.length > 0 ? instructions[0] : null)
+  return passed || firstVisible
 }

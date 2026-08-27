@@ -83,3 +83,18 @@ test('pickInstruction: 没有任何滚出时回退为第一条', () => {
   assert.equal(pickInstruction(list, rects, 30, 4).key, 'a')
   assert.equal(pickInstruction([], rects, 30, 4), null)
 })
+
+test('pickInstruction: 首条无 rect 时回退为第一条有 rect 的指令', () => {
+  const list = [{ key: 'a', text: '甲' }, { key: 'b', text: '乙' }, { key: 'c', text: '丙' }]
+  const rects = new Map([
+    ['b', { bottom: 60 }],
+    ['c', { bottom: 90 }],
+  ])
+  assert.equal(pickInstruction(list, rects, 30, 4).key, 'b')
+})
+
+test('instructionTextOf: 全角空格/换行折叠为半角空格，纯空白块被跳过', () => {
+  assert.equal(instructionTextOf({ content: [{ type: 'text', text: '甲\u3000\n乙' }] }), '甲 乙')
+  assert.equal(instructionTextOf({ content: [{ type: 'text', text: '   ' }] }), '')
+  assert.equal(instructionTextOf({ content: [{ type: 'image' }] }), '[图片]')
+})
