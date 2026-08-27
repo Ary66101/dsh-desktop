@@ -114,6 +114,8 @@ function InstructionBubble(props) {
     let scrollport = null
     let disposed = false
     let ro = null
+    let posRaf = 0
+    let lastRect = null
 
     const schedule = () => {
       if (raf !== 0) return
@@ -200,6 +202,24 @@ function InstructionBubble(props) {
     tick()
     timer = setInterval(tick, POLL_MS)
 
+    // Position tracker: detect layout shifts (e.g. sidebar collapse) that
+    // change the scrollport's *position* without changing its *size*.
+    // ResizeObserver only fires on size changes, so we use rAF to poll the
+    // rect every frame — cost is one getBoundingClientRect() per frame.
+    const trackPosition = () => {
+      if (disposed) return
+      const sp = scrollport
+      if (sp) {
+        const r = sp.getBoundingClientRect()
+        if (!lastRect || r.top !== lastRect.top || r.left !== lastRect.left || r.width !== lastRect.width) {
+          lastRect = { top: r.top, left: r.left, width: r.width }
+          schedule()
+        }
+      }
+      posRaf = requestAnimationFrame(trackPosition)
+    }
+    posRaf = requestAnimationFrame(trackPosition)
+
     return () => {
       disposed = true
       scheduleRef.current = null
@@ -209,6 +229,7 @@ function InstructionBubble(props) {
       if (scrollport) scrollport.removeEventListener('scroll', onScrollportScroll)
       if (timer) clearInterval(timer)
       if (raf !== 0) cancelAnimationFrame(raf)
+      if (posRaf !== 0) cancelAnimationFrame(posRaf)
       if (ro) { ro.disconnect(); ro = null }
     }
   }, [sessionId])
