@@ -109,6 +109,24 @@ function InstructionBubble(props) {
       return undefined
     }
 
+    /**
+     * The conversation's *visible* right edge. The right-side panel overlays
+     * the transcript and reflows it only after (or while) the panel slides;
+     * during the slide the panel's left edge is the true visible boundary.
+     * - panel left of the layout edge (opening / steady-open): the visible
+     *   conversation ends at the panel edge → follow it leftward;
+     * - panel right of the layout edge (closing): the conversation will widen
+     *   to the panel edge → follow it rightward.
+     * Both directions glide with the panel instead of snapping ~500ms late.
+     */
+    const visibleRightOf = (spRect) => {
+      const panel = document.querySelector('[data-dsh-panel]:not([data-dsh-bottom-panel])')
+      if (!panel || getComputedStyle(panel).visibility === 'hidden') return spRect.right
+      const pl = panel.getBoundingClientRect().left
+      if (pl <= spRect.left) return spRect.right
+      return pl < spRect.right ? pl : Math.min(pl, window.innerWidth)
+    }
+
     let raf = 0
     let timer = null
     let scrollport = null
@@ -117,16 +135,16 @@ function InstructionBubble(props) {
     let posRaf = 0
     let lastRect = null
 
-    const schedule = () => {
+    const schedule = (cause) => {
       if (raf !== 0) return
       raf = requestAnimationFrame(() => {
         raf = 0
-        if (!disposed) recompute()
+        if (!disposed) recompute(cause)
       })
     }
     scheduleRef.current = schedule
 
-    const recompute = () => {
+    const recompute = (cause) => {
       const snap = snapshotRef.current
       if (!snap || snap.removed || snap.blank) {
         hide()
@@ -156,11 +174,15 @@ function InstructionBubble(props) {
         return
       }
       setText(picked.text)
-      const w = Math.max(0, Math.min(spRect.width - 32, 640))
+      const vr = visibleRightOf(spRect)
+      const avail = Math.max(0, vr - spRect.left)
+      const w = Math.max(0, Math.min(avail - 32, 640))
+      const tracking = vr !== spRect.right
       const next = {
         top: spRect.top + 8,
-        left: spRect.left + (spRect.width - w) / 2,
+        left: spRect.left + (avail - w) / 2,
         width: w,
+        ...(tracking ? { transition: 'none' } : {}),
       }
       const prev = frameRef.current
       if (!prev || prev.top !== next.top || prev.left !== next.left || prev.width !== next.width) {
@@ -169,10 +191,10 @@ function InstructionBubble(props) {
       }
     }
 
-    const onWindowResize = () => schedule()
-    const onScrollportScroll = () => schedule()
+    const onWindowResize = () => schedule('window-resize')
+    const onScrollportScroll = () => schedule('scroll')
     const onVisibilityChange = () => {
-      if (!document.hidden) schedule()
+      if (!document.hidden) schedule('visibility')
     }
     window.addEventListener('resize', onWindowResize)
     document.addEventListener('visibilitychange', onVisibilityChange)
@@ -189,31 +211,29 @@ function InstructionBubble(props) {
         scrollport = found
         if (scrollport) {
           scrollport.addEventListener('scroll', onScrollportScroll)
-          ro = new ResizeObserver(() => schedule())
+          ro = new ResizeObserver(() => schedule('ro'))
           ro.observe(scrollport)
-          // Also observe the parent container — sidebar collapse changes the
-          // scrollport's *position* (left offset) without changing its *size*,
-          // so a ResizeObserver on the scrollport alone won't fire.
-          if (scrollport.parentElement) ro.observe(scrollport.parentElement)
         }
       }
-      recompute()
+      recompute('tick')
     }
     tick()
     timer = setInterval(tick, POLL_MS)
 
-    // Position tracker: detect layout shifts (e.g. sidebar collapse) that
-    // change the scrollport's *position* without changing its *size*.
-    // ResizeObserver only fires on size changes, so we use rAF to poll the
-    // rect every frame — cost is one getBoundingClientRect() per frame.
+    // Position tracker: the layout reflows the scrollport only *after* the
+    // side panel finishes sliding, so ResizeObserver fires ~500ms late. Poll
+    // the scrollport rect every frame (one getBoundingClientRect()) AND the
+    // panel's visible right edge (visibleRightOf), which glides during the
+    // slide — this is what makes the bubble re-center in lockstep.
     const trackPosition = () => {
       if (disposed) return
       const sp = scrollport
       if (sp) {
         const r = sp.getBoundingClientRect()
-        if (!lastRect || r.top !== lastRect.top || r.left !== lastRect.left || r.width !== lastRect.width) {
-          lastRect = { top: r.top, left: r.left, width: r.width }
-          schedule()
+        const vr = visibleRightOf(r)
+        if (!lastRect || r.top !== lastRect.top || r.left !== lastRect.left || r.width !== lastRect.width || vr !== lastRect.vr) {
+          lastRect = { top: r.top, left: r.left, width: r.width, vr }
+          schedule('raf')
         }
       }
       posRaf = requestAnimationFrame(trackPosition)
