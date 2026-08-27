@@ -238,8 +238,8 @@ test('pickInstruction: 有已滚出的指令时取最近一条', () => {
 test('pickInstruction: 全部滚出时返回最后一条，含容差边界', () => {
   const list = [{ key: 'a', text: '甲' }, { key: 'b', text: '乙' }]
   const rects = new Map([
-    ['a', { bottom: 34 }], // 34 <= 30 + 4 → 已滚出
-    ['b', { bottom: 40 }],
+    ['a', { bottom: 34 }], // 34 <= 30 + 4 → 已滚出（恰在容差边界）
+    ['b', { bottom: 30 }], // 30 <= 34 → 已滚出（原稿 40 无法通过：40 > 34，见计划更正注）
   ])
   assert.equal(pickInstruction(list, rects, 30, 4).key, 'b')
 })
@@ -333,7 +333,9 @@ export function pickInstruction(instructions, rects, foldTop, epsilon) {
 node --test test/
 ```
 
-预期：`# pass 7`、`# fail 0`（全部通过）。
+预期：`# pass 8`、`# fail 0`（全部通过）。
+
+> 计划更正注：测试文件含 8 个 `test()` 块（Task 2 的"全部滚出"夹具原稿 `b: {bottom: 40}` 与算法阈值 34 矛盾——40 > 34 未滚出，断言无法通过，属计划缺陷；已修正为 `{bottom: 30}`，rule.js 保持不变）。
 
 - [ ] **Step 5: 提交**
 
@@ -777,7 +779,7 @@ node scripts/build.mjs   # 生成 lib/client.js（__ModuleLoader__.load 注册�
 - [ ] **Step 3: 全量回归 + 提交**
 
 ```bash
-node --test test/            # 预期 # pass 7 / # fail 0
+node --test test/            # 预期 # pass 8 / # fail 0（沙箱内改用 node test/rule.test.mjs）
 node scripts/build.mjs       # 产物与源码一致（重新生成后 diff 为空）
 git status --short
 ```
