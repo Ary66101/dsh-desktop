@@ -31,6 +31,7 @@ function injectStyles() {
   position: fixed;
   z-index: 60;
   pointer-events: none;
+  transition: top 0.2s ease, left 0.2s ease, width 0.2s ease;
   box-sizing: border-box;
   max-width: calc(100vw - 32px);
   padding: 5px 14px;
@@ -112,6 +113,7 @@ function InstructionBubble(props) {
     let timer = null
     let scrollport = null
     let disposed = false
+    let ro = null
 
     const schedule = () => {
       if (raf !== 0) return
@@ -154,7 +156,7 @@ function InstructionBubble(props) {
       setText(picked.text)
       const next = {
         top: spRect.top + 8,
-        left: spRect.left + 16,
+        left: spRect.left + (spRect.width - next.width) / 2,
         width: Math.max(0, Math.min(spRect.width - 32, 640)),
       }
       const prev = frameRef.current
@@ -177,9 +179,16 @@ function InstructionBubble(props) {
     const tick = () => {
       const found = document.querySelector('[data-conversation-scroll]')
       if (found !== scrollport) {
-        if (scrollport) scrollport.removeEventListener('scroll', onScrollportScroll)
+        if (scrollport) {
+          scrollport.removeEventListener('scroll', onScrollportScroll)
+          if (ro) { ro.disconnect(); ro = null }
+        }
         scrollport = found
-        if (scrollport) scrollport.addEventListener('scroll', onScrollportScroll)
+        if (scrollport) {
+          scrollport.addEventListener('scroll', onScrollportScroll)
+          ro = new ResizeObserver(() => schedule())
+          ro.observe(scrollport)
+        }
       }
       recompute()
     }
@@ -195,6 +204,7 @@ function InstructionBubble(props) {
       if (scrollport) scrollport.removeEventListener('scroll', onScrollportScroll)
       if (timer) clearInterval(timer)
       if (raf !== 0) cancelAnimationFrame(raf)
+      if (ro) { ro.disconnect(); ro = null }
     }
   }, [sessionId])
 
