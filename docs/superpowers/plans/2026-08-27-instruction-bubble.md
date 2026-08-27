@@ -620,9 +620,20 @@ git commit -m "feat(instruction-bubble): 浏览器入口组件与插槽接线（
 
 **Files:**
 - Create: `D:\deepseek harness\dsh-instruction-bubble\scripts\build.mjs`
+- Create: `D:\deepseek harness\dsh-instruction-bubble\.gitattributes`（`* text eol=lf`，保证跨检出 LF 不变）
 - Create: `D:\deepseek harness\dsh-instruction-bubble\lib\client.js`（生成产物，提交）
 
 - [ ] **Step 1: 实现 scripts/build.mjs**
+
+创建 `scripts/build.mjs` 与 `.gitattributes`，内容如下（UTF-8、无 BOM、末尾换行）：
+
+先创建 `.gitattributes`：
+
+```gitignore
+* text eol=lf
+```
+
+再创建 `scripts/build.mjs`：
 
 ```js
 /**
@@ -646,20 +657,20 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const PACKAGE_ID = 'dsh-instruction-bubble'
 
 /** Turn one ESM source file into factory-body CJS text. */
-function toBody(src) {
-  let out = src
+function toBody(src, label) {
+  let out = src.replace(/\r\n/g, '\n') // ending-agnostic: LF-only splicing
   // Combined import: `import React, { a, b } from 'react'`
   out = out.replace(
-    /import\s+([A-Za-z_$][\w$]*)\s*,\s*\{\s*([\w$,\s]+?)\s*\}\s+from\s+['"]([^'"]+)['"]\s*;?/g,
+    /import\s+([A-Za-z_$][\w$]*)\s*,\s*\{\s*([\w$,\s]+?)\s*\}\s+from\s+['"]([^'"]+)['"];?/g,
     (_m, defaultName, named, spec) => {
-      if (spec.startsWith('.')) throw new Error(`combined import from relative module not supported: ${spec}`)
+      if (spec.startsWith('.')) throw new Error(`combined import from relative module not supported in ${label}: ${spec}`)
       const names = named.split(',').map((s) => s.trim()).filter(Boolean)
       return `const ${defaultName} = require(${JSON.stringify(spec)});\nconst { ${names.join(', ')} } = ${defaultName};`
     }
   )
   // Named-only import: `import { a, b } from 'x'` (relative: spliced, line dropped)
   out = out.replace(
-    /import\s*\{\s*([\w$,\s]+?)\s*\}\s+from\s+['"]([^'"]+)['"]\s*;?/g,
+    /import\s*\{\s*([\w$,\s]+?)\s*\}\s+from\s+['"]([^'"]+)['"];?/g,
     (_m, named, spec) => {
       if (spec.startsWith('.')) return ''
       const names = named.split(',').map((s) => s.trim()).filter(Boolean)
@@ -670,6 +681,11 @@ function toBody(src) {
   out = out.replace(/export\s+function\s+/g, 'function ')
   out = out.replace(/export\s+const\s+/g, 'const ')
   out = out.replace(/export\s*\{\s*[^}]*\}\s*;?/g, '')
+  // Loud tripwire: any untransformed ESM statement would kill the classic
+  // script at load (build-time purity gate).
+  if (/\b(import|export)\s/.test(out)) {
+    throw new Error(`untransformed ESM statement remains in ${label}`)
+  }
   return out
 }
 
@@ -677,8 +693,8 @@ const ruleSrc = readFileSync(join(root, 'src', 'client', 'rule.js'), 'utf8')
 const entrySrc = readFileSync(join(root, 'src', 'client', 'index.js'), 'utf8')
 
 const body =
-  toBody(ruleSrc) + '\n' +
-  toBody(entrySrc) + '\n' +
+  toBody(ruleSrc, 'rule.js') + '\n' +
+  toBody(entrySrc, 'index.js') + '\n' +
   'exports.apply = apply;\n' +
   'exports.inject = inject;\n'
 
@@ -719,9 +735,11 @@ node -e "const s=require('node:fs').readFileSync('lib/client.js','utf8');for(con
 - [ ] **Step 4: 提交**
 
 ```bash
-git add scripts/build.mjs lib/client.js
+git add scripts/build.mjs .gitattributes lib/client.js
 git commit -m "feat(instruction-bubble): 构建脚本与 lib/client.js 产物（__ModuleLoader__ 注册）"
 ```
+
+> 计划更正注 4（Task 4 代码审查后修订）：① import 正则去掉尾部 `\s*`（原稿会吞掉换行，后续若在 import 后加 `//` 注释会吞代码）；② `toBody` 先 `\r\n → \n` 归一 + 包内新增 `.gitattributes`（`* text eol=lf`），保证任意检出状态下重建字节一致；③ 末尾加 ESM 残留断言（残留 `import|export` 即构建报错，兜住 build-time purity gate）；④ throw 报错带上文件名。
 
 ---
 
