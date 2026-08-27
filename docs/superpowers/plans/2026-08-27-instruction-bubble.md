@@ -766,7 +766,7 @@ pnpm add "file:D:/deepseek harness/dsh-instruction-bubble"
 
 （本包零 dependencies、无安装脚本，不会被 pnpm 的 build-script 拦截。）
 
-> 计划更正注 5（Task 5 实测记录）：`pnpm add link:` 在本机被 pnpm 11 的 `minimumReleaseAge` supply-chain 策略拦截（lockfile 中 @linxin666/* 条目发布不足 24h；项目级 `.npmrc` 设 `minimumReleaseAge=0` 实测无效，该键未被 pnpm 读取）。改用确定性手工安装：① 在 profile 的 `node_modules` 创建指向源码目录的 **junction**（`New-Item -ItemType Junction`）；② `package.json` 的 `dependencies` 追加 `"dsh-instruction-bubble": "link:D:/deepseek harness/dsh-instruction-bubble"`。boot 图会扫描 node_modules 中的 `dsh.bundle.patch` 包（better-sidebar 即如此加载，且不在 bundles 列表），无需 pnpm。**注意：boot 图在服务器启动时组成——安装后需用户手动重启 `dsh web` 并硬刷新**（代理会话依赖该 GUI，禁止从会话内杀/重启该服务）。
+> 计划更正注 5（Task 5 实测记录）：`pnpm add link:` 在本机被 pnpm 11 的 `minimumReleaseAge` supply-chain 策略拦截（lockfile 中 @linxin666/* 条目发布不足 24h；项目级 `.npmrc` 设 `minimumReleaseAge=0` 实测无效，该键未被 pnpm 读取）。改用确定性手工安装：① 在 profile 的 `node_modules` 创建指向源码目录的 **junction**（`New-Item -ItemType Junction`）；② `package.json` 的 `dependencies` 追加 `"dsh-instruction-bubble": "link:D:/deepseek harness/dsh-instruction-bubble"`。**关键：boot 图由 `dsh.profile.bundles` 栈组成（better-sidebar 能加载是因为聚合包 @linxin666/dsh-web-ui-all 的 patch 显式挂载它，并非扫描 node_modules）——因此还必须把 `dsh-instruction-bubble` 追加进 `dsh.profile.bundles`，否则插件包 404 且不出现在 boot 图。** **且 boot 图在服务器启动时组成——改完需用户手动重启 `dsh web` 并硬刷新**（代理会话依赖该 GUI，禁止从会话内杀/重启该服务）。
 
 - [ ] **Step 2: 硬刷新 GUI 验证加载**
 
