@@ -189,6 +189,10 @@ function InstructionBubble(props) {
           scrollport.addEventListener('scroll', onScrollportScroll)
           ro = new ResizeObserver(() => schedule())
           ro.observe(scrollport)
+          // Also observe the parent container — sidebar collapse changes the
+          // scrollport's *position* (left offset) without changing its *size*,
+          // so a ResizeObserver on the scrollport alone won't fire.
+          if (scrollport.parentElement) ro.observe(scrollport.parentElement)
         }
       }
       recompute()
